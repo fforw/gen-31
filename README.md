@@ -1,3 +1,3 @@
-# Simple Starter
+# worldgen
 
-Simple JS build starter for simple, client-only demos.
+wip
