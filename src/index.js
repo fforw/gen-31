@@ -1,8 +1,13 @@
 import domready from "domready"
 import "./style.css"
-import { createHexagon, hexagonScale } from "./area";
+import { createHexagon, deleteAllHexagons, hexagonScale } from "./area";
 import centroid from "./util";
 import { Edge, Face, HalfEdge, Vertex } from "./geometry";
+import colors from "./colors";
+import Color, { getLuminance } from "./Color";
+import weightedRandom from "./weightedRandom";
+
+import { Runner, Bodies, Composite, Engine, Render } from "matter-js"
 
 
 const PHI = (1 + Math.sqrt(5)) / 2;
@@ -361,13 +366,13 @@ function subdivideQuad(faces, face)
 {
 
     let ha = face.halfEdge
-    let hab = face.halfEdge.next
-    let hb = face.halfEdge.next.next
-    let hbc = face.halfEdge.next.next.next
-    let hc = face.halfEdge.next.next.next.next
-    let hcd = face.halfEdge.next.next.next.next.next
-    let hd = face.halfEdge.next.next.next.next.next.next
-    let hda = face.halfEdge.next.next.next.next.next.next.next
+    let hab = ha.next
+    let hb = hab.next
+    let hbc = hb.next
+    let hc = hbc.next
+    let hcd = hc.next
+    let hd = hcd.next
+    let hda = hd.next
 
 
     const vertex = new Vertex(
@@ -388,10 +393,10 @@ function subdivideQuad(faces, face)
     const hvcd = new HalfEdge(hcd, vertex, new Edge(null), fd);
     const hvda = new HalfEdge(hda, vertex, new Edge(null), fa);
 
-    const habv = new HalfEdge(hvcd, hab.vertex, hvcd.edge, fa);
+    const habv = new HalfEdge(hvda, hab.vertex, hvcd.edge, fa);
     const hbcv = new HalfEdge(hvab, hbc.vertex, hvab.edge, fb);
     const hcdv = new HalfEdge(hvbc, hcd.vertex, hvbc.edge, fc);
-    const hdav = new HalfEdge(hvda, hda.vertex, hvbc.edge, fd);
+    const hdav = new HalfEdge(hvcd, hda.vertex, hvda.edge, fd);
 
     hvab.twinWith(habv)
     hvbc.twinWith(hbcv)
@@ -429,7 +434,15 @@ function divideIntoQuads(faces)
         }
         else if ( length === 8 )
         {
-            subdivideQuad(newFaces, face)
+            if (Math.random() < 0.5)
+            {
+                subdivideQuad(newFaces, face)
+            }
+            else
+            {
+                newFaces.push(face)
+            }
+
         }
         else
         {
@@ -551,7 +564,7 @@ function relax(faces)
 
     const verts = [... set]
 
-    const relaxCount = 0|(faces.length * 2.5)
+    const relaxCount = 0|(faces.length * 100)
     for (let i=0; i < relaxCount; i++)
     {
         const v = verts[0|Math.random() * verts.length]
@@ -598,23 +611,17 @@ function pDistance(x, y, x1, y1, x2, y2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-function renderCircle(face)
+
+function getMinimumDistanceToPoint(face, x0, y0)
 {
-    const [x0,y0] = centroid(face)
-
-    const { width, height} = config;
-
-    const cx = width/2;
-    const cy = height/2;
-
     let min = Infinity
     let curr = face.halfEdge;
     do
     {
         const dist = pDistance(
-            x0,y0,
-            curr.vertex.x,curr.vertex.y,
-            curr.next.vertex.x,curr.next.vertex.y,
+            x0, y0,
+            curr.vertex.x, curr.vertex.y,
+            curr.next.vertex.x, curr.next.vertex.y,
         );
 
         if (dist < min)
@@ -624,7 +631,20 @@ function renderCircle(face)
         curr = curr.next
     } while (curr !== face.halfEdge)
 
-    const radius = min
+    return min;
+}
+
+
+function renderCircle(face, palette, faceCentroid)
+{
+
+    const { width, height} = config;
+
+    const cx = width/2;
+    const cy = height/2;
+
+    const [x0,y0] = faceCentroid
+    const radius = getMinimumDistanceToPoint(face, x0, y0);
     // let sum = 0
     // let count = 0
     // let curr = face.halfEdge;
@@ -644,14 +664,77 @@ function renderCircle(face)
     //
     // const radius = sum/count
 
+    const length = face.length;
+
+    const fill = length === 4 && Math.random() < 0.3;
+    if (fill)
+    {
+        ctx.fillStyle = palette[0 | Math.random() * palette.length]
+    }
+    else
+    {
+        ctx.strokeStyle = palette[0 | Math.random() * palette.length]
+    }
+
     ctx.beginPath();
     ctx.moveTo(cx + x0 + radius,cy + y0)
     ctx.arc(cx + x0, cy + y0,radius,0,TAU, true)
     ctx.stroke()
 
+    if (fill)
+    {
+        ctx.fill()
+    }
+    else
+    {
+        ctx.stroke()
+    }
+
+
+    return radius
+
+}
+
+const black = new Color(0,0,0)
+
+function darkest(palette)
+{
+    let min = Infinity;
+    let best;
+    for (let i = 0; i < palette.length; i++)
+    {
+        const color = palette[i];
+
+        const lum = getLuminance(color)
+        if (lum < min)
+        {
+            min = lum
+            best = color
+        }
+    }
+
+    console.log("DARKEST", min)
+    if (min > 5000)
+    {
+        const darkened = Color.from(best).mix(black, 0.85).toRGBHex();
+        console.log("darken", darkened)
+        return darkened
+    }
+
+    return best;
 }
 
 
+const randomLabel = weightedRandom([
+    1, "Happy",
+    0.5, "New",
+    0.5, "Year",
+    1, "2022",
+    1, null
+])
+
+
+let engine, renderer
 domready(
     () => {
 
@@ -667,60 +750,200 @@ domready(
         canvas.width = width;
         canvas.height = height;
 
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0,0, width, height);
+        // create an engine
+        engine = Engine.create();
 
-        let faces = [];
-        const verts = []
+        engine.gravity.x = 0
+        engine.gravity.y = 0
 
-        const size = 0|(width/(Math.sqrt(3) * hexagonScale));
-        const hSize = 0|(size * 0.25)
-
-        for (let q=-hSize; q <=hSize ; q++)
-        {
-            for (let r=-hSize; r <=hSize ; r++)
-            {
-                createHexagon(q,r, faces, verts)
+        // create a renderer
+        renderer = Render.create({
+            element: document.getElementById("screen"),
+            engine: engine,
+            options: {
+                width,
+                height,
+                wireframes: false
             }
-        }
+        });
 
-        const edges = [... findInsideEdges(faces)]
-        shuffle(edges)
 
-        const count = 0|(edges.length * 0.05)
-        for (let i=0; i < count; i++)
+        function build()
         {
-            const edge = edges[i];
-            removeEdge(faces, edge)
+            deleteAllHexagons()
+
+            let faces = [];
+            const verts = []
+
+            const size = Math.ceil(width / (Math.sqrt(3) * hexagonScale));
+            const hSize = 0 | (size * 0.51)
+
+            for (let q = -hSize; q <= hSize; q++)
+            {
+                for (let r = -hSize; r <= hSize; r++)
+                {
+                    createHexagon(q, r, faces, verts)
+                }
+            }
+
+            const edges = [...findInsideEdges(faces)]
+            shuffle(edges)
+
+            const count = 0 | (edges.length * 0.05)
+            for (let i = 0; i < count; i++)
+            {
+                const edge = edges[i];
+                removeEdge(faces, edge)
+            }
+
+            faces = divideIntoQuads(faces)
+            faces.forEach(validateFace)
+            relax(faces)
+            return faces;
         }
 
-        let subDividedQuads = divideIntoQuads(faces)
 
-        faces = subDividedQuads
-
-        faces.forEach(validateFace)
-
-        //relax(faces)
+        const simulate = () => {
 
 
+            const palettes = colors();
+            const palette = palettes[0 | Math.random() * palettes.length]
 
-        //
-        // console.log("FACES", faces, faces.map(f => f.length))
-        // console.log("VERTS", verts.map(v => (v.x|0) + "/" + (v.y|0)))
-        // console.log("EDGES", edges)
+            const bgColor = darkest(palette);
+            let faces = build();
+
+            //
+            console.log("FACES", faces.length, faces.map(f => f.length))
+            // console.log("VERTS", verts.map(v => (v.x|0) + "/" + (v.y|0)))
+            // console.log("EDGES", edges)
+
+            //divideIntoQuads(faces)
+
+
+            const data = new Map();
+
+            const centroids = faces.map(centroid)
+            const isBig = faces.map(face => face.length === 8)
+
+            // add all of the bodies to the world
+            const bodies = faces
+                .filter((face,idx) => (isBig[idx] || Math.random() < 0.5))
+                .map(
+                (face,idx) => {
+                    const faceCentroid = centroids[idx]
+                    const [x0,y0] = faceCentroid
+                    const radius = getMinimumDistanceToPoint(face, x0, y0);
+
+                    //console.log(x0 + "," + y0 + ", " + radius)
+
+                    const body = Bodies.circle(width / 2 + faceCentroid[0], height / 2 + faceCentroid[1], radius * 0.95);
+
+
+                    const fill = !isBig[idx] && Math.random() < 0.3;
+
+                    const color = palette[0 | Math.random() * palette.length];
+
+                    data.set(body, {
+                        radius,
+                        fill,
+                        color,
+                        label: isBig && randomLabel()
+                    })
+
+                    return body
+
+                }
+            );
+            Composite.add(engine.world, [
+                ... bodies
+            ]);
+
+            const render = () => {
+                //const bodies = Composite.allBodies(engine.world);
+
+
+                ctx.fillStyle = bgColor
+                ctx.fillRect(0,0,width,height)
+
+                for (let i = 0; i < bodies.length; i++)
+                {
+                    const body = bodies[i];
+
+                    const {radius, label, fill, color} = data.get(body);
+
+
+                    if (fill)
+                    {
+                        ctx.fillStyle = color
+                    }
+                    else
+                    {
+                        ctx.strokeStyle = color
+                    }
+
+                    ctx.moveTo(body.position.x + radius, body.position.y)
+                    ctx.arc(body.position.x, body.position.y, radius, 0, TAU, true)
+
+                    if (fill)
+                    {
+                        ctx.fill()
+                    }
+                    else
+                    {
+                        ctx.stroke()
+                    }
 
 
 
-        //divideIntoQuads(faces)
+                }
+
+                
+                
+                window.requestAnimationFrame(render);
+            }
+
+            window.requestAnimationFrame(render);
 
 
-        faces.forEach(face => {
-            ctx.strokeStyle = "#f0f"
-            ctx.fillStyle = "#0f0"
-            renderDebugFace(face, true, false)
-            // ctx.strokeStyle = "#f0f"
-            // renderCircle(face)
-        })
+            // faces.forEach(face => {
+            //     ctx.strokeStyle = "#f0f"
+            //     ctx.fillStyle = "#0f0"
+            //     //            renderDebugFace(face, true, false)
+            //     ctx.strokeStyle = "#f0f"
+            //
+            //     const faceCentroid = centroid(face)
+            //     const isBig = face.length === 8;
+            //
+            //     let radius
+            //     if (isBig || Math.random() < 0.5)
+            //     {
+            //         radius = renderCircle(face, palette, faceCentroid)
+            //     }
+            //
+            //     if (isBig)
+            //     {
+            //         const label = randomLabel()
+            //         if (label)
+            //         {
+            //             /**
+            //              *
+            //              * @type {TextMetrics}
+            //              */
+            //             ctx.font = Math.round(radius * 0.4) + "px Lato,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\",\"Segoe UI Symbol\""
+            //             const textMetrics = ctx.measureText(label);
+            //
+            //             ctx.fillStyle = palette[0 | Math.random() * palette.length]
+            //
+            //             ctx.fillText(label, width/2 + faceCentroid[0] - textMetrics.width/2,  height/2 + faceCentroid[1] + width * 0.003);
+            //         }
+            //     }
+            //
+            // })
+        };
+
+        simulate();
+
+        //window.addEventListener("click", simulate, true)
 
     }
 );

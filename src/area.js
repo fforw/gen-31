@@ -49,6 +49,11 @@ export function lookupHexagonFaceIndex(q,r)
     return hexagons.get(key(q,r))
 }
 
+export function deleteAllHexagons()
+{
+    hexagons.clear()
+}
+
 
 export function createHexagon(q, r, faces, points)
 {

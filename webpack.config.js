@@ -72,7 +72,14 @@ module.exports = (env,argv) => {
                         patterns: [
                             {
                                 from: "media/**/*"
-                            }
+                            },
+                            {
+                                from: "css/**/*"
+                            },
+                            {
+                                from: "webfonts/**/*"
+                            },
+
                         ]
                     }
                 )

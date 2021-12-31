@@ -3,6 +3,7 @@ export function clamp(v)
     return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+
 export default function centroid(face) {
     let x = 0;
     let y = 0;
