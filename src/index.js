@@ -7,8 +7,6 @@ import colors from "./colors";
 import Color, { getLuminance } from "./Color";
 import weightedRandom from "./weightedRandom";
 
-import { Runner, Bodies, Composite, Engine, Render } from "matter-js"
-
 
 const PHI = (1 + Math.sqrt(5)) / 2;
 const TAU = Math.PI * 2;
@@ -36,31 +34,37 @@ function drawArrow(x0, y0, x1, y1)
     const dy = y1 - y0;
     const dx = x1 - x0;
 
-    if (dx * dx + dy * dy > 2)
+
+
+    const nx = dy * 0.08
+    const ny = -dx * 0.08
+
+    const start = 0.01
+    const end = 0.5
+
+    const x2 = x0 + (x1 - x0) * start
+    const y2 = y0 + (y1 - y0) * start
+    const x3 = x0 + (x1 - x0) * end
+    const y3 = y0 + (y1 - y0) * end
+
+    const x4 = x0 + (x1 - x0) * (start + (end - start) * 0.6)
+    const y4 = y0 + (y1 - y0) * (start + (end - start) * 0.6)
+
+    ctx.strokeStyle = "#0f0"
+    ctx.beginPath()
+    ctx.moveTo(cx + x2, cy + y2)
+    ctx.lineTo(cx + x3, cy + y3)
+
+    ctx.moveTo(cx + x3, cy + y3)
+    ctx.lineTo(cx + x4 + nx, cy + y4 + ny)
+    ctx.moveTo(cx + x3, cy + y3)
+    ctx.lineTo(cx + x4 - nx, cy + y4 - ny)
+    ctx.stroke()
+
+    if (dx * dx + dy * dy < 1)
     {
-        const nx = dy * 0.08
-        const ny = -dx * 0.08
-
-        const start = 0.01
-        const end = 0.5
-
-        const x2 = x0 + (x1 - x0) * start
-        const y2 = y0 + (y1 - y0) * start
-        const x3 = x0 + (x1 - x0) * end
-        const y3 = y0 + (y1 - y0) * end
-
-        const x4 = x0 + (x1 - x0) * (start + (end - start) * 0.6)
-        const y4 = y0 + (y1 - y0) * (start + (end - start) * 0.6)
-
-        ctx.beginPath()
-        ctx.moveTo(cx + x2, cy + y2)
-        ctx.lineTo(cx + x3, cy + y3)
-
-        ctx.moveTo(cx + x3, cy + y3)
-        ctx.lineTo(cx + x4 + nx, cy + y4 + ny)
-        ctx.moveTo(cx + x3, cy + y3)
-        ctx.lineTo(cx + x4 - nx, cy + y4 - ny)
-        ctx.stroke()
+        ctx.fillStyle = "#f0f"
+        ctx.fillRect(0|(cx + x0-1),0|(cy + y0-1),2,2)
     }
 }
 
@@ -94,13 +98,11 @@ function renderDebugFace(face, drawNext = false, ids = false)
         const y0 = 0|(cy + curr.vertex.y)
         const x1 = 0|(cx + next.vertex.x)
         const y1 = 0|(cy + next.vertex.y)
-        ctx.save()
-        ctx.strokeStyle = "rgba(255,255,255,0.5)"
+        ctx.strokeStyle = "rgba(255,255,255,0.3)"
         ctx.beginPath()
         ctx.moveTo(x0, y0)
         ctx.lineTo(x1, y1)
         ctx.stroke()
-        ctx.restore()
 
 
         //ctx.fillRect(x0 - 2,y0 - 2,4,4)
@@ -430,7 +432,15 @@ function divideIntoQuads(faces)
         }
         else if ( length === 8 )
         {
-            subdivideQuad(newFaces, face)
+            if (Math.random() < 0.5)
+            {
+                subdivideQuad(newFaces, face)
+            }
+            else
+            {
+                newFaces.push(face)
+            }
+
         }
         else
         {
@@ -599,17 +609,23 @@ function pDistance(x, y, x1, y1, x2, y2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-
-function getMinimumDistanceToPoint(face, x0, y0)
+function renderCircle(face, palette, faceCentroid)
 {
+    const [x0,y0] = faceCentroid
+
+    const { width, height} = config;
+
+    const cx = width/2;
+    const cy = height/2;
+
     let min = Infinity
     let curr = face.halfEdge;
     do
     {
         const dist = pDistance(
-            x0, y0,
-            curr.vertex.x, curr.vertex.y,
-            curr.next.vertex.x, curr.next.vertex.y,
+            x0,y0,
+            curr.vertex.x,curr.vertex.y,
+            curr.next.vertex.x,curr.next.vertex.y,
         );
 
         if (dist < min)
@@ -619,20 +635,7 @@ function getMinimumDistanceToPoint(face, x0, y0)
         curr = curr.next
     } while (curr !== face.halfEdge)
 
-    return min;
-}
-
-
-function renderCircle(face, palette, faceCentroid)
-{
-
-    const { width, height} = config;
-
-    const cx = width/2;
-    const cy = height/2;
-
-    const [x0,y0] = faceCentroid
-    const radius = getMinimumDistanceToPoint(face, x0, y0);
+    const radius = min
     // let sum = 0
     // let count = 0
     // let curr = face.halfEdge;
@@ -685,30 +688,21 @@ function renderCircle(face, palette, faceCentroid)
 
 const black = new Color(0,0,0)
 
-
-function minMax(palette, predicate, min)
+function darkest(palette)
 {
+    let min = Infinity;
     let best;
     for (let i = 0; i < palette.length; i++)
     {
         const color = palette[i];
 
         const lum = getLuminance(color)
-        if (predicate(min, lum))
+        if (lum < min)
         {
             min = lum
             best = color
         }
     }
-    return {min, best};
-}
-
-
-function darkest(palette)
-{
-
-    const predicate = (min,lum) => lum < min
-    let {min, best} = minMax(palette, predicate, Infinity);
 
     console.log("DARKEST", min)
     if (min > 5000)
@@ -717,23 +711,6 @@ function darkest(palette)
         console.log("darken", darkened)
         return darkened
     }
-
-    return best;
-}
-
-function lightest(palette)
-{
-
-    const predicate = (min,lum) => lum > min
-    let {min, best} = minMax(palette, predicate, -Infinity);
-
-    // console.log("DARKEST", min)
-    // if (min > 5000)
-    // {
-    //     const darkened = Color.from(best).mix(black, 0.85).toRGBHex();
-    //     console.log("darken", darkened)
-    //     return darkened
-    // }
 
     return best;
 }
@@ -748,7 +725,6 @@ const randomLabel = weightedRandom([
 ])
 
 
-let engine, renderer
 domready(
     () => {
 
@@ -764,27 +740,16 @@ domready(
         canvas.width = width;
         canvas.height = height;
 
-        // create an engine
-        engine = Engine.create();
 
-        engine.gravity.x = 0
-        engine.gravity.y = 0
+        const paint = () => {
 
-        // create a renderer
-        renderer = Render.create({
-            element: document.getElementById("screen"),
-            engine: engine,
-            options: {
-                width,
-                height,
-                wireframes: false
-            }
-        });
-
-
-        function build()
-        {
             deleteAllHexagons()
+
+            const palettes = colors();
+            const palette = palettes[0 | Math.random() * palettes.length]
+
+            ctx.fillStyle = darkest(palette);
+            ctx.fillRect(0, 0, width, height);
 
             let faces = [];
             const verts = []
@@ -813,18 +778,6 @@ domready(
             faces = divideIntoQuads(faces)
             faces.forEach(validateFace)
             relax(faces)
-            return faces;
-        }
-
-
-        const simulate = () => {
-
-
-
-            const bgColor = "#002";
-            ctx.fillStyle = bgColor
-            ctx.fillRect(0,0,width,height)
-            let faces = build();
 
             //
             console.log("FACES", faces.length, faces.map(f => f.length))
@@ -834,15 +787,47 @@ domready(
             //divideIntoQuads(faces)
 
 
-            ctx.strokeStyle = ctx.fillStyle = "#0c0"
             faces.forEach(face => {
-                renderDebugFace(face, true, false)
+                ctx.strokeStyle = "#f0f"
+                ctx.fillStyle = "#0f0"
+                //            renderDebugFace(face, true, false)
+                ctx.strokeStyle = "#f0f"
+
+                const faceCentroid = centroid(face)
+                const isBig = face.length === 8;
+
+                let radius
+                if (isBig || Math.random() < 0.5)
+                {
+                    radius = renderCircle(face, palette, faceCentroid)
+                }
+
+                if (isBig)
+                {
+                    const label = randomLabel()
+                    if (label)
+                    {
+                        /**
+                         *
+                         * @type {TextMetrics}
+                         */
+                        ctx.font = Math.round(radius * 0.4) + "px Lato,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\",\"Segoe UI Symbol\""
+                        const textMetrics = ctx.measureText(label);
+
+                        ctx.fillStyle = palette[0 | Math.random() * palette.length]
+
+                        ctx.fillText(label, width/2 + faceCentroid[0] - textMetrics.width/2,  height/2 + faceCentroid[1] + width * 0.003);
+                    }
+                }
+
             })
         };
 
-        simulate();
+        const fontSize = Math.round(Math.max(width ,height) * 0.012);
 
-        //window.addEventListener("click", simulate, true)
+        paint();
+
+        window.addEventListener("click", paint, true)
 
     }
 );
