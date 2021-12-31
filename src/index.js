@@ -609,7 +609,7 @@ function pDistance(x, y, x1, y1, x2, y2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-function renderCircle(face, palette, faceCentroid)
+function renderCircle(face, palette, faceCentroid, isBig)
 {
     const [x0,y0] = faceCentroid
 
@@ -635,7 +635,7 @@ function renderCircle(face, palette, faceCentroid)
         curr = curr.next
     } while (curr !== face.halfEdge)
 
-    const radius = min
+    const radius = min * (isBig ? 1 : 0.1 + 0.9 * Math.random())
     // let sum = 0
     // let count = 0
     // let curr = face.halfEdge;
@@ -786,6 +786,9 @@ domready(
 
             //divideIntoQuads(faces)
 
+            const cx = width/2
+            const cy = height/2
+
 
             faces.forEach(face => {
                 ctx.strokeStyle = "#f0f"
@@ -797,9 +800,45 @@ domready(
                 const isBig = face.length === 8;
 
                 let radius
-                if (isBig || Math.random() < 0.5)
+                if (isBig)
                 {
-                    radius = renderCircle(face, palette, faceCentroid)
+                    radius = renderCircle(face, palette, faceCentroid, isBig)
+                }
+                else {
+
+                    const n = Math.random()
+                    if (n < 0.55)
+                    {
+                        radius = renderCircle(face, palette, faceCentroid, isBig)
+                    }
+                    else if (n > 0.85)
+                    {
+                        ctx.fillStyle = palette[0 | Math.random() * palette.length]
+                        ctx.beginPath();
+
+                        let curr = face.halfEdge
+                        let x0 = curr.vertex.x;
+                        let y0 = curr.vertex.y;
+
+                        const particleSize = 0.5 + Math.random() * 0.3
+
+                        x0 = x0 + (faceCentroid[0] - x0) * particleSize
+                        y0 = y0 + (faceCentroid[1] - y0) * particleSize
+
+                        ctx.moveTo(cx + x0,  cy + y0)
+                        do
+                        {
+                            let x0 = 0 | (curr.vertex.x);
+                            let y0 = 0 | (curr.vertex.y);
+                            x0 = x0 + (faceCentroid[0] - x0) * particleSize
+                            y0 = y0 + (faceCentroid[1] - y0) * particleSize
+                            ctx.lineTo(cx + x0,  cy + y0)
+
+                            curr = curr.next
+                        } while (curr !== face.halfEdge)
+                        ctx.fill()
+
+                    }
                 }
 
                 if (isBig)
@@ -822,8 +861,6 @@ domready(
 
             })
         };
-
-        const fontSize = Math.round(Math.max(width ,height) * 0.012);
 
         paint();
 
