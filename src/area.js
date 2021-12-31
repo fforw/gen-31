@@ -6,7 +6,7 @@ const sin60 = Math.sin(TAU / 6);
 
 //export const hexagonScale = 200;
 //export const hexagonScale = 100;
-export const hexagonScale = 100;
+export const hexagonScale = 90;
 const hFactor = Math.sqrt(3);
 
 const directions = [
